@@ -182,7 +182,10 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
   GstCaps *caps;
   const gchar *name;
 
-  if (!gst_pad_has_current_caps (pad)) {
+    g_print ("xxxx on_incoming_decodebin_stream");
+
+
+    if (!gst_pad_has_current_caps (pad)) {
     g_printerr ("Pad '%s' has no caps, can't do anything, ignoring\n",
         GST_PAD_NAME (pad));
     return;
@@ -214,7 +217,10 @@ on_incoming_stream (GstElement * webrtcbin, GstPad * pad, WebRTC * webrtc)
 {
   GstElement *decodebin;
 
-  if (GST_PAD_DIRECTION (pad) != GST_PAD_SRC)
+    g_print ("xxxx on_incoming_stream");
+
+
+    if (GST_PAD_DIRECTION (pad) != GST_PAD_SRC)
     return;
 
   decodebin = gst_element_factory_make ("decodebin", NULL);
@@ -245,6 +251,7 @@ send_ice_candidate_message (GstElement * webrtcbin G_GNUC_UNUSED,
   json_object_set_object_member (msg, "ice", ice);
   text = get_string_from_json_object (msg);
   json_object_unref (msg);
+  g_print ("Sending ice candidate message :\n%s\n", text);
 
   soup_websocket_connection_send_text (webrtc->ws_conn, text);
   g_free (text);
@@ -305,6 +312,63 @@ on_offer_created (GstPromise * promise, WebRTC * webrtc)
   gst_webrtc_session_description_free (offer);
 }
 
+
+static void
+_on_answer_received (GstPromise * promise, WebRTC * webrtc)
+{
+  GstWebRTCSessionDescription *answer = NULL;
+  const GstStructure *reply;
+  gchar *desc;
+
+  g_assert (gst_promise_wait (promise) == GST_PROMISE_RESULT_REPLIED);
+  reply = gst_promise_get_reply (promise);
+  gst_structure_get (reply, "answer",
+                     GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &answer, NULL);
+  gst_promise_unref (promise);
+  desc = gst_sdp_message_as_text (answer->sdp);
+  g_print ("Created answer:\n%s\n", desc);
+  g_free (desc);
+
+  /* this is one way to tell webrtcbin that we don't want to be notified when
+   * this task is complete: set a NULL promise */
+  g_signal_emit_by_name (webrtc->webrtcbin, "set-remote-description", answer, NULL);
+  /* this is another way to tell webrtcbin that we don't want to be notified
+   * when this task is complete: interrupt the promise */
+  promise = gst_promise_new ();
+  g_signal_emit_by_name (webrtc->webrtcbin, "set-local-description", answer, promise);
+  gst_promise_interrupt (promise);
+  gst_promise_unref (promise);
+
+  gst_webrtc_session_description_free (answer);
+}
+
+
+static void
+_on_offer_received (GstPromise * promise, WebRTC * webrtc)
+{
+  GstWebRTCSessionDescription *offer = NULL;
+  const GstStructure *reply;
+  gchar *desc;
+
+  g_assert (gst_promise_wait (promise) == GST_PROMISE_RESULT_REPLIED);
+  reply = gst_promise_get_reply (promise);
+  gst_structure_get (reply, "offer",
+                     GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &offer, NULL);
+  gst_promise_unref (promise);
+  desc = gst_sdp_message_as_text (offer->sdp);
+  g_print ("Created offer:\n%s\n", desc);
+  g_free (desc);
+
+  g_signal_emit_by_name (webrtc->webrtcbin, "set-local-description", offer, NULL);
+
+  promise = gst_promise_new_with_change_func (_on_answer_received, webrtc
+                                              ,NULL);
+  g_signal_emit_by_name (webrtc->webrtcbin, "create-answer", NULL, promise);
+
+  gst_webrtc_session_description_free (offer);
+}
+
+
 static void
 on_negotiation_needed (GstElement * element, WebRTC * webrtc)
 {
@@ -339,12 +403,33 @@ start_pipeline (WebRTC * webrtc)
   GstPad *pad;
 
   webrtc->pipe =
-      gst_parse_launch ("webrtcbin name=sendrecv "
-      "ahcsrc device-facing=front ! video/x-raw,width=[320,1280] ! queue max-size-buffers=1 ! videoconvert ! "
-      "vp8enc keyframe-max-dist=30 deadline=1 error-resilient=default ! rtpvp8pay picture-id-mode=15-bit mtu=1300 ! "
-      "queue max-size-time=300000000 ! " RTP_CAPS_VP8 " ! sendrecv.sink_0 "
-      "openslessrc ! queue ! audioconvert ! audioresample ! audiorate ! queue ! opusenc ! rtpopuspay ! "
-      "queue ! " RTP_CAPS_OPUS " ! sendrecv.sink_1 ", &error);
+//      gst_parse_launch ("webrtcbin name=sendrecv "
+//      "ahcsrc device-facing=front ! video/x-raw,width=[320,1280] ! queue max-size-buffers=1 ! videoconvert ! "
+//      "vp8enc keyframe-max-dist=30 deadline=1 error-resilient=default ! rtpvp8pay picture-id-mode=15-bit mtu=1300 ! "
+//      "queue max-size-time=300000000 ! " RTP_CAPS_VP8 " ! sendrecv.sink_0 "
+//      "openslessrc ! queue ! audioconvert ! audioresample ! audiorate ! queue ! opusenc ! rtpopuspay ! "
+//      "queue ! " RTP_CAPS_OPUS " ! sendrecv.sink_1 ", &error);
+
+//    pipe1 =
+//            gst_parse_launch ("videotestsrc ! queue ! vp8enc ! rtpvp8pay ! queue ! "
+//                              "application/x-rtp,media=video,payload=96,encoding-name=VP8 ! "
+//                              "webrtcbin name=smpte videotestsrc pattern=ball ! queue ! vp8enc ! rtpvp8pay ! queue ! "
+//                              "application/x-rtp,media=video,payload=96,encoding-name=VP8 ! webrtcbin name=ball",
+//                              NULL);
+//  webrtc->pipe =
+//          gst_parse_launch ("webrtcbin name=sendrecv "
+//                            "videotestsrc pattern=ball ! videoconvert ! "
+//                            "vp8enc keyframe-max-dist=30 deadline=1 error-resilient=default ! rtpvp8pay picture-id-mode=15-bit mtu=1300 ! "
+//                            "queue max-size-time=300000000 ! " RTP_CAPS_VP8 " ! sendrecv.sink_0", &error);
+    webrtc->pipe = gst_parse_launch("webrtcbin name=recvonly ! audiotestsrc ! fakesink", &error);
+    GstWebRTCRTPTransceiver *trans = NULL;
+    GstCaps *video_caps = gst_caps_from_string("application/x-rtp,media=video,encoding-name=VP8,payload=96,clock-rate=90000");
+
+//    webrtc->pipe =
+//        gst_parse_launch (
+//        "webrtcbin name=sendrecv "
+//        "videotestsrc pattern=ball rtpvp8depay ! vp8dec ! videoconvert ! fakevideosink", &error);
+
 
   if (error) {
     g_printerr ("Failed to parse launch: %s\n", error->message);
@@ -352,9 +437,13 @@ start_pipeline (WebRTC * webrtc)
     goto err;
   }
 
-  webrtc->webrtcbin = gst_bin_get_by_name (GST_BIN (webrtc->pipe), "sendrecv");
+  webrtc->webrtcbin = gst_bin_get_by_name (GST_BIN (webrtc->pipe), "recvonly");
   g_assert (webrtc->webrtcbin != NULL);
   add_fec_to_offer (webrtc->webrtcbin);
+
+  g_signal_emit_by_name(webrtc->webrtcbin, "add-transceiver", GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, video_caps, NULL, &trans);
+  gst_caps_unref(video_caps);
+  gst_object_unref(trans);
 
   /* This is the gstwebrtc entry point where we create the offer and so on. It
    * will be called when the pipeline goes to PLAYING. */
@@ -363,8 +452,10 @@ start_pipeline (WebRTC * webrtc)
   /* We need to transmit this ICE candidate to the browser via the websockets
    * signalling server. Incoming ice candidates from the browser need to be
    * added by us too, see on_server_message() */
+
   g_signal_connect (webrtc->webrtcbin, "on-ice-candidate",
       G_CALLBACK (send_ice_candidate_message), webrtc);
+
   /* Incoming streams will be exposed via this signal */
   g_signal_connect (webrtc->webrtcbin, "pad-added",
       G_CALLBACK (on_incoming_stream), webrtc);
@@ -416,7 +507,8 @@ register_with_server (WebRTC * webrtc)
       SOUP_WEBSOCKET_STATE_OPEN)
     return FALSE;
 
-  our_id = g_random_int_range (10, 10000);
+  //our_id = g_random_int_range (10, 10000);
+  our_id = 1111;
   g_print ("Registering id %i with server\n", our_id);
   webrtc->app_state = SERVER_REGISTERING;
 
@@ -513,6 +605,8 @@ on_server_message (SoupWebsocketConnection * conn, SoupWebsocketDataType type,
     JsonObject *object;
     JsonParser *parser = json_parser_new ();
 
+    //text = "{\"sdp\":{\"type\":\"answer\",\"sdp\":\"v=0\\r\\no=-47986385983303266882INIP4127.0.0.1\\r\\ns=-\\r\\nt=00\\r\\na=msid-semantic:WMS669AoCxemfQLsj5gEq6gvs4ZzjDbU7ix5NzK\\r\\nm=video9UDP/TLS/RTP/SAVPF1019697\\r\\nc=INIP40.0.0.0\\r\\na=rtcp:9INIP40.0.0.0\\r\\na=ice-ufrag:oPqT\\r\\na=ice-pwd:QCZE+0mD1aTF20ti1lAlvaUD\\r\\na=ice-options:trickle\\r\\na=fingerprint:sha-25682:B2:70:CE:6E:4D:FD:5D:21:D9:A5:99:20:24:0C:D6:6B:55:AD:C0:FF:F1:87:47:4C:57:FD:62:59:6D:7F:ED\\r\\na=setup:active\\r\\na=mid:video0\\r\\na=sendrecv\\r\\na=rtcp-mux\\r\\na=rtcp-rsize\\r\\na=rtpmap:101VP8/90000\\r\\na=rtcp-fb:101transport-cc\\r\\na=rtcp-fb:101nackpli\\r\\na=rtpmap:96red/90000\\r\\na=rtpmap:97ulpfec/90000\\r\\na=ssrc:853341829cname:v7WSZpZKIcjK4Eym\\r\\na=ssrc:853341829msid:669AoCxemfQLsj5gEq6gvs4ZzjDbU7ix5NzKd2200ed0-71f7-4008-a5ca-7ed94ec968c9\\r\\na=ssrc:853341829mslabel:669AoCxemfQLsj5gEq6gvs4ZzjDbU7ix5NzK\\r\\na=ssrc:853341829label:d2200ed0-71f7-4008-a5ca-7ed94ec968c9\\r\\n\"}}";
+
     g_print ("Got server message %s", text);
 
     if (!json_parser_load_from_data (parser, text, -1, NULL)) {
@@ -545,8 +639,8 @@ on_server_message (SoupWebsocketConnection * conn, SoupWebsocketDataType type,
       /* In this example, we always create the offer and receive one answer.
        * See tests/examples/webrtcbidirectional.c in gst-plugins-bad for how to
        * handle offers from peers and reply with answers using webrtcbin. */
-      g_assert_cmpstr (json_object_get_string_member (object, "type"), ==,
-          "answer");
+//      g_assert_cmpstr (json_object_get_string_member (object, "type"), ==,
+//          "answer");
 
       text = json_object_get_string_member (object, "sdp");
 
@@ -573,7 +667,10 @@ on_server_message (SoupWebsocketConnection * conn, SoupWebsocketDataType type,
 
       webrtc->app_state = PEER_CALL_STARTED;
     } else if (json_object_has_member (object, "ice")) {
-      JsonObject *ice;
+        g_print ("Got server message ice message");
+
+
+        JsonObject *ice;
       const gchar *candidate;
       gint sdpmlineindex;
 

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<android.support.constraint.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/layout"
@@ -59,13 +60,13 @@
                 android:layout_height="wrap_content"
                 android:layout_margin="8dp"
                 android:inputType="number"
-                android:text="ID" />
+                android:text="2234" />
         </TableRow>
 
     </TableLayout>
 
 
-    <android.support.constraint.ConstraintLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/controls"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -100,7 +101,7 @@
             app:layout_constraintStart_toEndOf="@+id/button_play"
             app:layout_constraintTop_toTopOf="@+id/button_play" />
 
-    </android.support.constraint.ConstraintLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 
     <org.freedesktop.gstreamer.webrtc.GStreamerSurfaceView
@@ -114,11 +115,11 @@
         app:layout_constraintTop_toBottomOf="@id/controls"
         app:layout_constraintVertical_bias="1.0" />
 
-    <android.support.constraint.Guideline
+    <androidx.constraintlayout.widget.Guideline
         android:id="@+id/guideline"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         app:layout_constraintGuide_begin="50dp" />
 
-</android.support.constraint.ConstraintLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

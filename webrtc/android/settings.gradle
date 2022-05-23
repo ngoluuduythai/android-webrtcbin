@@ -1,1 +1,4 @@
 include ':app'
+def gstreamersdk='/Users/zero/Downloads/1.20.1'
+include ':gstreamer'
+project(':gstreamer').projectDir = new File(gstreamersdk)
