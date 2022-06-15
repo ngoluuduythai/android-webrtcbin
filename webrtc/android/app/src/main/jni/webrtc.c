@@ -182,7 +182,7 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
   GstCaps *caps;
   const gchar *name;
 
-    g_print ("xxxx on_incoming_decodebin_stream");
+    g_print("xxxx on_incoming_decodebin_stream");
 
 
     if (!gst_pad_has_current_caps (pad)) {
@@ -195,6 +195,8 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
   name = gst_structure_get_name (gst_caps_get_structure (caps, 0));
 
   if (g_str_has_prefix (name, "video")) {
+    g_print("xxxx g_str_has_prefix video");
+
     GstElement *sink =
         handle_media_stream (pad, webrtc->pipe, "videoconvert", "glimagesink");
     if (webrtc->video_sink == NULL) {
@@ -204,6 +206,8 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
             (gpointer) webrtc->native_window);
     }
   } else if (g_str_has_prefix (name, "audio")) {
+    g_print("xxxx g_str_has_prefix audio");
+
     handle_media_stream (pad, webrtc->pipe, "audioconvert", "autoaudiosink");
   } else {
     g_printerr ("Unknown pad %s, ignoring", GST_PAD_NAME (pad));
@@ -421,9 +425,9 @@ start_pipeline (WebRTC * webrtc)
 //                            "videotestsrc pattern=ball ! videoconvert ! "
 //                            "vp8enc keyframe-max-dist=30 deadline=1 error-resilient=default ! rtpvp8pay picture-id-mode=15-bit mtu=1300 ! "
 //                            "queue max-size-time=300000000 ! " RTP_CAPS_VP8 " ! sendrecv.sink_0", &error);
-    webrtc->pipe = gst_parse_launch("webrtcbin name=recvonly ! audiotestsrc ! fakesink", &error);
+    webrtc->pipe = gst_parse_launch("webrtcbin name=recvonly turn-server=turn://tel4vn:TEL4VN.COM@turn.tel4vn.com:5349?transport=tcp ! videotestsrc ! fakesink", &error);
     GstWebRTCRTPTransceiver *trans = NULL;
-    GstCaps *video_caps = gst_caps_from_string("application/x-rtp,media=video,encoding-name=VP8,payload=96,clock-rate=90000");
+    GstCaps *video_caps = gst_caps_from_string("application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000");
 
 //    webrtc->pipe =
 //        gst_parse_launch (
@@ -440,7 +444,7 @@ start_pipeline (WebRTC * webrtc)
   webrtc->webrtcbin = gst_bin_get_by_name (GST_BIN (webrtc->pipe), "recvonly");
   g_assert (webrtc->webrtcbin != NULL);
   add_fec_to_offer (webrtc->webrtcbin);
-
+  // setup webrtc bin is recvonly
   g_signal_emit_by_name(webrtc->webrtcbin, "add-transceiver", GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, video_caps, NULL, &trans);
   gst_caps_unref(video_caps);
   gst_object_unref(trans);
