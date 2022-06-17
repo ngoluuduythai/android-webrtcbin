@@ -236,6 +236,29 @@ on_incoming_stream (GstElement * webrtcbin, GstPad * pad, WebRTC * webrtc)
 }
 
 static void
+on_ice_gathering_state_notify (GstElement * webrtcbin, GParamSpec * pspec,
+                               gpointer user_data)
+{
+  GstWebRTCICEGatheringState ice_gather_state;
+  const gchar *new_state = "unknown";
+
+  g_object_get (webrtcbin, "ice-gathering-state", &ice_gather_state, NULL);
+  switch (ice_gather_state) {
+    case GST_WEBRTC_ICE_GATHERING_STATE_NEW:
+      new_state = "new";
+          break;
+    case GST_WEBRTC_ICE_GATHERING_STATE_GATHERING:
+      new_state = "gathering";
+          break;
+    case GST_WEBRTC_ICE_GATHERING_STATE_COMPLETE:
+      new_state = "complete";
+          break;
+  }
+  gst_print ("ICE gathering state changed to %s\n", new_state);
+}
+
+
+static void
 send_ice_candidate_message (GstElement * webrtcbin G_GNUC_UNUSED,
     guint mlineindex, gchar * candidate, WebRTC * webrtc)
 {
@@ -348,7 +371,7 @@ _on_answer_received (GstPromise * promise, WebRTC * webrtc)
 
 
 static void
-_on_offer_received (GstPromise * promise, WebRTC * webrtc)
+_on_offer_received(GstPromise * promise, WebRTC * webrtc)
 {
   GstWebRTCSessionDescription *offer = NULL;
   const GstStructure *reply;
@@ -379,8 +402,8 @@ on_negotiation_needed (GstElement * element, WebRTC * webrtc)
   GstPromise *promise;
 
   webrtc->app_state = PEER_CALL_NEGOTIATING;
-  promise = gst_promise_new_with_change_func (on_offer_created, webrtc, NULL);;
-  g_signal_emit_by_name (webrtc->webrtcbin, "create-offer", NULL, promise);
+  //promise = gst_promise_new_with_change_func (on_offer_created, webrtc, NULL);;
+  //g_signal_emit_by_name (webrtc->webrtcbin, "create-offer", NULL, promise);
 }
 
 static void
@@ -407,12 +430,12 @@ start_pipeline (WebRTC * webrtc)
   GstPad *pad;
 
   webrtc->pipe =
-//      gst_parse_launch ("webrtcbin name=sendrecv "
-//      "ahcsrc device-facing=front ! video/x-raw,width=[320,1280] ! queue max-size-buffers=1 ! videoconvert ! "
-//      "vp8enc keyframe-max-dist=30 deadline=1 error-resilient=default ! rtpvp8pay picture-id-mode=15-bit mtu=1300 ! "
-//      "queue max-size-time=300000000 ! " RTP_CAPS_VP8 " ! sendrecv.sink_0 "
-//      "openslessrc ! queue ! audioconvert ! audioresample ! audiorate ! queue ! opusenc ! rtpopuspay ! "
-//      "queue ! " RTP_CAPS_OPUS " ! sendrecv.sink_1 ", &error);
+      gst_parse_launch ("webrtcbin name=sendrecv "
+      "videotestsrc pattern=ball ! videoconvert ! "
+      "vp8enc keyframe-max-dist=30 deadline=1 error-resilient=default ! rtpvp8pay picture-id-mode=15-bit mtu=1300 ! "
+      "queue max-size-time=300000000 ! " RTP_CAPS_VP8 " ! sendrecv.sink_0 "
+      "openslessrc ! queue ! audioconvert ! audioresample ! audiorate ! queue ! opusenc ! rtpopuspay ! "
+      "queue ! " RTP_CAPS_OPUS " ! sendrecv.sink_1 ", &error);
 
 //    pipe1 =
 //            gst_parse_launch ("videotestsrc ! queue ! vp8enc ! rtpvp8pay ! queue ! "
@@ -425,9 +448,11 @@ start_pipeline (WebRTC * webrtc)
 //                            "videotestsrc pattern=ball ! videoconvert ! "
 //                            "vp8enc keyframe-max-dist=30 deadline=1 error-resilient=default ! rtpvp8pay picture-id-mode=15-bit mtu=1300 ! "
 //                            "queue max-size-time=300000000 ! " RTP_CAPS_VP8 " ! sendrecv.sink_0", &error);
-    webrtc->pipe = gst_parse_launch("webrtcbin name=recvonly turn-server=turn://tel4vn:TEL4VN.COM@turn.tel4vn.com:5349?transport=tcp ! videotestsrc ! fakesink", &error);
-    GstWebRTCRTPTransceiver *trans = NULL;
-    GstCaps *video_caps = gst_caps_from_string("application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000");
+//    webrtc->pipe = gst_parse_launch("webrtcbin name=senonly message-forward=true turn-server=turn://tel4vn:TEL4VN.COM@turn.tel4vn.com:5349?transport=tcp bundle-policy=max-bundle "
+//                                    "videotestsrc pattern=ball is-live=true ! videoconvert ! x264enc ! rtph264pay config-interval=-1 ! "
+//                                    "application/x-rtp,media=video,encoding-name=H264,payload=100,clock-rate=90000 ! webrtcbin.", &error);
+    //GstWebRTCRTPTransceiver *trans = NULL;
+    //GstCaps *video_caps = gst_caps_from_string("application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000");
 
 //    webrtc->pipe =
 //        gst_parse_launch (
@@ -441,13 +466,13 @@ start_pipeline (WebRTC * webrtc)
     goto err;
   }
 
-  webrtc->webrtcbin = gst_bin_get_by_name (GST_BIN (webrtc->pipe), "recvonly");
+  webrtc->webrtcbin = gst_bin_get_by_name (GST_BIN (webrtc->pipe), "senonly");
   g_assert (webrtc->webrtcbin != NULL);
   add_fec_to_offer (webrtc->webrtcbin);
   // setup webrtc bin is recvonly
-  g_signal_emit_by_name(webrtc->webrtcbin, "add-transceiver", GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, video_caps, NULL, &trans);
-  gst_caps_unref(video_caps);
-  gst_object_unref(trans);
+  //g_signal_emit_by_name(webrtc->webrtcbin, "add-transceiver", GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, video_caps, NULL, &trans);
+  //gst_caps_unref(video_caps);
+  //gst_object_unref(trans);
 
   /* This is the gstwebrtc entry point where we create the offer and so on. It
    * will be called when the pipeline goes to PLAYING. */
@@ -459,6 +484,10 @@ start_pipeline (WebRTC * webrtc)
 
   g_signal_connect (webrtc->webrtcbin, "on-ice-candidate",
       G_CALLBACK (send_ice_candidate_message), webrtc);
+
+  g_signal_connect (webrtc->webrtcbin, "notify::ice-gathering-state",
+                    G_CALLBACK (on_ice_gathering_state_notify), NULL);
+
 
   /* Incoming streams will be exposed via this signal */
   g_signal_connect (webrtc->webrtcbin, "pad-added",
@@ -496,7 +525,7 @@ setup_call (WebRTC * webrtc)
   g_print ("Setting up signalling server call with %s\n", webrtc->peer_id);
   webrtc->app_state = PEER_CONNECTING;
   msg = g_strdup_printf ("SESSION %s", webrtc->peer_id);
-  soup_websocket_connection_send_text (webrtc->ws_conn, msg);
+  //soup_websocket_connection_send_text (webrtc->ws_conn, msg);
   g_free (msg);
   return TRUE;
 }
@@ -512,7 +541,7 @@ register_with_server (WebRTC * webrtc)
     return FALSE;
 
   //our_id = g_random_int_range (10, 10000);
-  our_id = 1111;
+  our_id = webrtc->peer_id;
   g_print ("Registering id %i with server\n", our_id);
   webrtc->app_state = SERVER_REGISTERING;
 
@@ -632,7 +661,7 @@ on_server_message (SoupWebsocketConnection * conn, SoupWebsocketDataType type,
       int ret;
       const gchar *text;
       GstSDPMessage *sdp;
-      GstWebRTCSessionDescription *answer;
+      GstWebRTCSessionDescription *offer;
 
       g_assert (webrtc->app_state == PEER_CALL_NEGOTIATING);
 
@@ -648,7 +677,7 @@ on_server_message (SoupWebsocketConnection * conn, SoupWebsocketDataType type,
 
       text = json_object_get_string_member (object, "sdp");
 
-      g_print ("Received answer:\n%s\n", text);
+      g_print ("Received offer:\n%s\n", text);
 
       ret = gst_sdp_message_new (&sdp);
       g_assert (ret == GST_SDP_OK);
@@ -656,15 +685,16 @@ on_server_message (SoupWebsocketConnection * conn, SoupWebsocketDataType type,
       ret = gst_sdp_message_parse_buffer (text, strlen (text), sdp);
       g_assert (ret == GST_SDP_OK);
 
-      answer = gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_ANSWER,
+      offer = gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_ANSWER,
           sdp);
-      g_assert (answer);
+      g_assert (offer);
 
       /* Set remote description on our pipeline */
       {
         GstPromise *promise = gst_promise_new ();
         g_signal_emit_by_name (webrtc->webrtcbin, "set-remote-description",
-            answer, promise);
+                               offer, promise);
+
         gst_promise_interrupt (promise);
         gst_promise_unref (promise);
       }
@@ -844,6 +874,7 @@ _call_thread (WebRTC * webrtc)
   context = g_main_context_new ();
   webrtc->loop = g_main_loop_new (context, FALSE);
   g_main_context_invoke (context, (GSourceFunc) _unlock_mutex, &webrtc->lock);
+  //connect websocket in mainloop
   g_main_context_invoke (context,
       (GSourceFunc) connect_to_websocket_server_async, webrtc);
   g_main_context_push_thread_default (context);
