@@ -235,6 +235,75 @@ on_incoming_stream (GstElement * webrtcbin, GstPad * pad, WebRTC * webrtc)
   gst_element_link (webrtcbin, decodebin);
 }
 
+
+static void
+on_ice_gathering_state_notify (GstElement * webrtcbin, GParamSpec * pspec,
+                               gpointer user_data)
+{
+  GstWebRTCICEGatheringState ice_gather_state;
+  const gchar *new_state = "unknown";
+
+  g_object_get (webrtcbin, "ice-gathering-state", &ice_gather_state, NULL);
+  switch (ice_gather_state) {
+    case GST_WEBRTC_ICE_GATHERING_STATE_NEW:
+      new_state = "new";
+          break;
+    case GST_WEBRTC_ICE_GATHERING_STATE_GATHERING:
+      new_state = "gathering";
+          break;
+    case GST_WEBRTC_ICE_GATHERING_STATE_COMPLETE:
+      new_state = "complete";
+          break;
+  }
+  gst_print ("ICE gathering state changed to %s\n", new_state);
+}
+
+static gboolean webrtcbin_get_stats (GstElement * webrtcbin);
+
+static gboolean
+on_webrtcbin_stat (GQuark field_id, const GValue * value, gpointer unused)
+{
+    if (GST_VALUE_HOLDS_STRUCTURE (value)) {
+        GST_DEBUG ("stat: \'%s\': %" GST_PTR_FORMAT, g_quark_to_string (field_id),
+                   gst_value_get_structure (value));
+    } else {
+        GST_FIXME ("unknown field \'%s\' value type: \'%s\'",
+                   g_quark_to_string (field_id), g_type_name (G_VALUE_TYPE (value)));
+    }
+
+    return TRUE;
+}
+
+static void
+on_webrtcbin_get_stats (GstPromise * promise, GstElement * webrtcbin)
+{
+    const GstStructure *stats;
+
+    g_return_if_fail (gst_promise_wait (promise) == GST_PROMISE_RESULT_REPLIED);
+
+    stats = gst_promise_get_reply (promise);
+    gst_structure_foreach (stats, on_webrtcbin_stat, NULL);
+
+    g_timeout_add (100, (GSourceFunc) webrtcbin_get_stats, webrtcbin);
+}
+
+static gboolean
+webrtcbin_get_stats (GstElement * webrtcbin)
+{
+    GstPromise *promise;
+
+    promise =
+            gst_promise_new_with_change_func (
+                    (GstPromiseChangeFunc) on_webrtcbin_get_stats, webrtcbin, NULL);
+
+    GST_TRACE ("emitting get-stats on %" GST_PTR_FORMAT, webrtcbin);
+    g_signal_emit_by_name (webrtcbin, "get-stats", NULL, promise);
+    gst_promise_unref (promise);
+
+    return G_SOURCE_REMOVE;
+}
+
+
 static void
 send_ice_candidate_message (GstElement * webrtcbin G_GNUC_UNUSED,
     guint mlineindex, gchar * candidate, WebRTC * webrtc)
@@ -460,13 +529,20 @@ start_pipeline (WebRTC * webrtc)
   g_signal_connect (webrtc->webrtcbin, "on-ice-candidate",
       G_CALLBACK (send_ice_candidate_message), webrtc);
 
+  g_signal_connect (webrtc->webrtcbin, "notify::ice-gathering-state",
+                    G_CALLBACK (on_ice_gathering_state_notify), NULL);
+
   /* Incoming streams will be exposed via this signal */
   g_signal_connect (webrtc->webrtcbin, "pad-added",
       G_CALLBACK (on_incoming_stream), webrtc);
   /* Lifetime is the same as the pipeline itself */
   gst_object_unref (webrtc->webrtcbin);
 
-  g_print ("Starting pipeline\n");
+  g_timeout_add (100, (GSourceFunc) webrtcbin_get_stats, webrtc->webrtcbin);
+
+
+
+    g_print ("Starting pipeline\n");
   ret = gst_element_set_state (GST_ELEMENT (webrtc->pipe), GST_STATE_PLAYING);
   if (ret == GST_STATE_CHANGE_FAILURE)
     goto err;
