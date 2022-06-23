@@ -349,7 +349,7 @@ start_pipeline (WebRTC * webrtc)
     GstPad *pad;
 
     webrtc->pipe =
-            gst_parse_launch ("webrtcbin name=sendrecv turn-server=turn://tel4vn:TEL4VN.COM@turn.tel4vn.com:5349?transport=tcp ! videotestsrc pattern=ball is-live=true  ! fakesink", &error);
+            gst_parse_launch ("webrtcbin name=sendrecv stun-server=stun:stun.l.google.com:19302 ! videotestsrc pattern=ball is-live=true  ! fakesink", &error);
 
     //webrtc->pipe = gst_parse_launch("webrtcbin name=recvonly turn-server=turn://tel4vn:TEL4VN.COM@turn.tel4vn.com:5349?transport=tcp ! videotestsrc ! fakesink", &error);
     GstWebRTCRTPTransceiver *trans = NULL;
