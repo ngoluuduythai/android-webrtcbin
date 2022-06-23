@@ -8,6 +8,7 @@ import android.util.Log
 import android.view.SurfaceHolder
 import android.view.View
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat.getSystemService
 import androidx.recyclerview.widget.RecyclerView
 import org.freedesktop.gstreamer.WebRTC
@@ -20,7 +21,7 @@ class PeerViewHolder(view: View, private val getItem: (Int) -> TrackPeerMap) :
     private lateinit var webrtcView: GStreamerSurfaceView
     private lateinit var trackPeerMap: TrackPeerMap
     private lateinit var context: Context
-    private var webRTC: WebRTC = WebRTC()
+    private var webRTC: WebRTC? = null
     private  var wake_lock: WakeLock? = null
 
     init {
@@ -40,19 +41,26 @@ class PeerViewHolder(view: View, private val getItem: (Int) -> TrackPeerMap) :
     ) {
 
         val gsv = itemView.findViewById<GStreamerSurfaceView>(R.id.remote_view)
-        this.webrtcView = webrtcView
+        this.webrtcView = gsv
         this.trackPeerMap = trackPeerMap
         this.context = context
+
+        try {
+            WebRTC.init(context)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         wake_lock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK, "GStreamer WebRTC")
         wake_lock?.setReferenceCounted(false)
 
+        webRTC = WebRTC()
 
-        webRTC.signallingServer = trackPeerMap.url
-        webRTC.callID = trackPeerMap.peerID.toString()
-        webRTC.surface = gsv.holder.surface
-        webRTC.callOtherParty()
+        webRTC?.signallingServer = trackPeerMap.url
+        webRTC?.callID = trackPeerMap.peerID.toString()
+        webRTC?.surface = gsv.holder.surface
+        webRTC?.callOtherParty()
         wake_lock?.acquire()
 
         val sh: SurfaceHolder = gsv.holder
@@ -74,12 +82,12 @@ class PeerViewHolder(view: View, private val getItem: (Int) -> TrackPeerMap) :
             "GStreamer", "Surface changed to format " + format + " width "
                     + width + " height " + height
         )
-        webRTC.surface = holder.surface
+        webRTC?.surface = holder.surface
     }
 
     override fun surfaceDestroyed(p0: SurfaceHolder) {
         Log.d("GStreamer", "Surface destroyed")
-        webRTC.surface = null
+        webRTC?.surface = null
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
